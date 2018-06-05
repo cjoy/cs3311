@@ -1,0 +1,6 @@
+select * from q1 order by team;
+select * from q2 order by player;
+select * from q3 order by team;
+select * from q4 order by team1, team2;
+select * from q5 order by team;
+select * from q6 where team1='Argentina' and team2='France' order by date;
