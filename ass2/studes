@@ -1,0 +1,27 @@
+<?
+// List of student summary data
+
+require_once("lib/defs.php");
+$db = dbConnect(DB_CONNECTION);
+
+$getStudents = <<<_SQL_
+select p.id, p.unswid, p.name, max(pr.code) as prog,
+         termName(min(pe.semester)) as started
+from   People p
+         join Program_enrolments pe on (pe.student = p.id)
+         join Programs pr on (pe.program = pr.id)
+group  by p.id, p.unswid, p.name
+_SQL_;
+
+$countCourses = <<<_SQL_
+select count(*) from Course_enrolments where student=%d
+_SQL_;
+
+$r = dbQuery($db, mkSQL($getStudents));
+while ($t = dbNext($r)) {
+	list($id,$unswid,$name,$prog,$started) = $t;
+	$ncourses = dbOneValue($db, mkSQL($countCourses,$id));
+	printf("%d %-30.30s  %s  %s  %d\n",
+	       $unswid,$name,$prog,$started,$ncourses);
+}
+?>

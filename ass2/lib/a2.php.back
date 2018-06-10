@@ -1,0 +1,190 @@
+<?php
+// COMP3311 18s1 Assignment 2
+// Functions for assignment Tasks A-E
+// Written by Christopher Joy (z5113243), May 2018
+
+// assumes that defs.php has already been included
+
+
+// Task A: get members of an academic object group
+
+// E.g. list($type,$codes) = membersOf($db, 111899)
+// Inputs:
+//  $db = open database handle
+//  $groupID = acad_object_group.id value
+// Outputs:
+//  array(GroupType,array(Codes...))
+//  GroupType = "subject"|"stream"|"program"
+//  Codes = acad object codes in alphabetical order
+//  e.g. array("subject",array("COMP2041","COMP2911"))
+
+function getEntityAttribute($db, $entity, $id, $attr) {
+	$q = "select ".$attr." from ".$entity." where id=".$id;
+	$tup = dbOneTuple($db,$q);
+	return $tup[$attr];
+}
+
+function getAcadObjGrp($db, $id) {
+	$q = "select * from acad_object_groups where id = %d";
+	$grp = dbOneTuple($db, mkSQL($q, $id));
+	return $grp;
+}
+
+function getAcadObjParents($db, $id) {
+	$parents = array($id);
+        $q = "select id from acad_object_groups where parent=".$id;
+        $res = dbQuery($db, $q);
+	while ($tup = dbNext($res)) {
+		array_push($parents, $tup["id"]);
+	}
+        return $parents;
+}
+
+function replaceRegex($str) {
+	$str = str_replace(",","|",$str);
+        $str = str_replace(";","|",$str);
+        $str = str_replace("{","(",$str);
+        $str = str_replace("}",")",$str);
+	$str = str_replace("all","[a-zA-Z0-9]",$str);
+	$str = str_replace("ALL","[a-zA-Z0-9]",$str);
+	$str = str_replace("#","[a-zA-Z0-9]",$str);
+	return $str;
+}
+
+function getEnumeratedAcadObjMembers($db, $gid, $type) {
+	$items = array();
+	$q = "select ".$type." from ".$type."_group_members where ao_group=".$gid;
+	$res = dbQuery($db, $q);
+	while ($tup = dbNext($res)) {
+		$name = getEntityAttribute($db, $type."s", $tup[$type], "code");
+		array_push($items, $name);
+	}
+	return $items;
+}
+
+function getCodesFromType($db, $type) {
+	$codes = array();
+	$q = "select code from ".$type."s";
+	$res = dbQuery($db, $q);
+	while ($tup = dbNext($res)) {
+		array_push($codes, $tup["code"]);
+	}
+	return $codes;
+}
+
+function membersOf($db,$groupID)
+{
+	$items = array();
+	foreach (getAcadObjParents($db, $groupID) as $gID) {
+		$grp = getAcadObjGrp($db, $gID);
+		switch ($grp["gdefby"]) {
+		case 'enumerated':
+			$_items = getEnumeratedAcadObjMembers($db, $grp["id"], $grp["gtype"]);
+			$items = array_merge($items, $_items);
+			break;
+		case 'pattern':
+			$codes = getCodesFromType($db, $grp["gtype"]);
+			$def = $grp["definition"];
+			if (preg_match("/^(GENG|GEN#|FREE|####|all|ALL)/", $def)) {
+				array_push($items, $def);
+			} elseif (preg_match("/\/F=[A-Z]$/", $def)) {
+				// TODO: handle faculty case
+			} else {
+				$matches = preg_grep("/^".replaceRegex($def)."$/", $codes);
+				foreach ($matches as $member) {
+					array_push($items, $member);
+				}
+			}
+			break;
+		case 'query':
+			// We don't have to deal with this.
+			break;
+		}
+	}
+
+	sort($items);
+	return array($type, $items); // stub
+}
+
+
+// Task B: check if given object is in a group
+
+// E.g. if (inGroup($db, "COMP3311", 111938)) ...
+// Inputs:
+//  $db = open database handle
+//  $code = code for acad object (program,stream,subject)
+//  $groupID = acad_object_group.id value
+// Outputs:
+//  true/false
+
+function inGroup($db, $code, $groupID)
+{
+        $items = array();
+	foreach (getAcadObjParents($db, $groupID) as $gID) {
+		$grp = getAcadObjGrp($db, $gID);
+        	switch ($grp["gdefby"]) {
+        	case 'enumerated':
+                        $_items = getEnumeratedAcadObjMembers($db, $grp["id"], $grp["gtype"]);
+                        $items = array_merge($items, $_items);
+	                break;
+		case 'pattern':
+			$codes = getCodesFromType($db, $grp["gtype"]);
+			$def = $grp["definition"];
+			break;
+       		case 'query':
+                	// We don't have to deal with this.
+                	break;
+		}
+	}
+	return in_array($code, $items); // stub
+}
+
+
+// Task C: can a subject be used to satisfy a rule
+
+// E.g. if (canSatisfy($db, "COMP3311", 2449, $enr)) ...
+// Inputs:
+//  $db = open database handle
+//  $code = code for acad object (program,stream,subject)
+//  $ruleID = rules.id value
+//  $enr = array(ProgramID,array(StreamIDs...))
+// Outputs:
+
+function canSatisfy($db, $code, $ruleID, $enrolment)
+{
+	return false; // stub
+}
+
+
+// Task D: determine student progress through a degree
+
+// E.g. $vtrans = progress($db, 3012345, "05s1");
+// Inputs:
+//  $db = open database handle
+//  $stuID = People.unswid value (i.e. unsw student id)
+//  $semester = code for semester (e.g. "09s2")
+// Outputs:
+//  Virtual transcript array (see spec for details)
+
+function progress($db, $stuID, $term)
+{
+	return array(); // stub
+}
+
+
+// Task E:
+
+// E.g. $advice = advice($db, 3012345, 162, 164)
+// Inputs:
+//  $db = open database handle
+//  $studentID = People.unswid value (i.e. unsw student id)
+//  $currTermID = code for current semester (e.g. "09s2")
+//  $nextTermID = code for next semester (e.g. "10s1")
+// Outputs:
+//  Advice array (see spec for details)
+
+function advice($db, $studentID, $currTermID, $nextTermID)
+{
+	return array(); // stub
+}
+?>

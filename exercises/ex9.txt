@@ -1,0 +1,225 @@
+https://cgi.cse.unsw.edu.au/~cs3311/18s1/exercises/09/index.php##
+
+1. Meaning of RA composition
+
+RA operations being composed means that the results from one operation can be used
+as the input to another operation. This is important because it allows us to build complex queries that depend on a number
+of operations to be performed.
+
+2. Difference of Natural Join ( R Join S ) and Theta Join (R Join[C] S)
+
+The theta-join combines relations S and R on only one common attribute A, since the conditon is specified as R.A=S.A, where as the natural-join statement combines both relations on all common attributes.
+
+3.  Proj[speed](PCs)
+a) set = {700, 1500, 1000, 700}
+b) bag = {700, 1500, 1000, 1000, 700}
+c) avg speed as set = (700+1500+1000+700)/4 = 975
+d) avg speed as bag = (700+1500+1000+1000+700)/5 = 980
+e) no, the min is 700 and max is 1500 in both the set and bag
+
+4.
+a) R Div S
+a
+--
+a1
+
+b)R Div (Sel[B != b1](S))
+Tmp1 = Sel[B != b1](S):
+b | c
+-----
+b2|c2
+
+R Div (Tmp1):
+a
+--
+a1
+
+
+c)R Div (Sel[B != b2](S)) 
+Tmp2 = Sel[B != b2](S):
+b | c
+-----
+b1|c1
+
+R Div (Tmp1):
+a
+--
+a1
+
+
+d) (R × S) - (Sel[R.C=S.C](R Join[B=B] S) 
+
+Tmp1 = R Join[B=B] S:
+R.A | R.B | R.C | S.B | S.C |
+-----------------------------
+a1  | b1  | c1  | b1  | c1  |
+a1  | b2  | c2  | b2  | c2  |
+a2  | b1  | c1  | b1  | c1  |
+
+
+Tmp2 = Sel[R.C=S.C](Tmp1):
+R.A | R.B | R.C | S.B | S.C |
+-----------------------------
+a1  | b1  | c1  | b1  | c1  |
+a1  | b2  | c2  | b2  | c2  |
+a2  | b1  | c1  | b1  | c1  |
+
+Tmp3 = (R × S):
+R.A | R.B | R.C | S.B | S.C |
+-----------------------------
+a1  | b1  | c1  | b1  | c1  |
+a1  | b1  | c1  | b2  | c2  |
+a1  | b2  | c2  | b1  | c1  |
+a1  | b2  | c2  | b2  | c2  |
+a2  | b1  | c1  | b1  | c1  |
+a2  | b1  | c1  | b2  | c2  |
+
+Tmp3 - Tmp2:
+R.A | R.B | R.C | S.B | S.C |
+-----------------------------
+a1  | b1  | c1  | b2  | c2  |
+a1  | b2  | c2  | b2  | c2  |
+a2  | b1  | c1  | b2  | c2  |
+
+
+5.
+
+a)    R1 Union R2
+assumptions: R1 and R2 are union compatible
+min: N1
+max: N1+N2
+
+b)    R1 Intersect R2
+assumptions: R1 and R2 are intersection compatible
+min: 0
+max: N2
+
+c)    R1 - R2
+assumptions: 
+min: N1 - N2
+max: N1
+
+d)    R1 × R2
+assumptions: 
+min: N1*N2
+max: N1*N2
+
+e)    Sel[a=5](R1)
+assumptions: 
+min: 0 (no matches)
+max: N1 (all tuples have a=5)
+
+f)    Proj[a](R1)
+assumptions: there's atleast 1 tuple in R1
+min: 1
+max: N1
+
+g)    R1 Div R2 
+assumptions: 
+min: 0
+max: floor(N1/N2)
+
+6.
+
+7. 
+
+   Suppliers(sid, sname, address)
+   Parts(pid, pname, colour)
+   Catalog(supplier, part, cost)
+
+a)
+RedParts = Sel[colour='red'](Parts)
+RedPartsCatalog = Catalog join[Calalog.part=Parts.pid] RedParts
+RedPartsSupplier = Supplier Join(Catalog.supplier = Supplier.sid) RedPartsCatalog
+Res = Proj[sname](RedPartsSupplier)
+
+b)
+// Get suppliers who produce red parts
+RedParts = Sel[colour='red'](Parts)
+RedPartsCatalog = Catalog join[Calalog.part=Parts.pid] RedParts
+RedPartsSID = Proj[supplier](RedPartsCatalog)
+// Get suppliers who produce green parts
+GreenParts = Sel[colour='green'](Parts)
+GreenPartsCatalog = Catalog join[Calalog.part=Parts.pid] GreenParts
+GreenPartsSID = Proj[supplier](GreenPartsCatalog)
+// Merge tuples from RedPartsSID and GreenPartsSID
+Res = RedPartsSID Union GreenPartsSID
+
+// alternatively
+RedOrGreenPartIDs = Proj[pid](Sel[colour='red' OR colour='green'](Parts))
+Res = Proj[sid](RedOrGreenPartIDs Join Catalog)
+
+c)
+AddressSID = Proj[sid](Sel[address='221 Packer Street'](Suppliers))
+RedParts = Sel[colour='red'](Parts)
+RedPartsCatalog = Catalog join[Calalog.part=Parts.pid] RedParts
+RedPartsSID = Proj[supplier](RedPartsCatalog)
+Res = AddressSID Union RedPartsSID
+
+d)
+// Get suppliers who produce red parts
+RedParts = Sel[colour='red'](Parts)
+RedPartsCatalog = Catalog join[Calalog.part=Parts.pid] RedParts
+RedPartsSID = Proj[supplier](RedPartsCatalog)
+// Get suppliers who produce green parts
+GreenParts = Sel[colour='green'](Parts)
+GreenPartsCatalog = Catalog join[Calalog.part=Parts.pid] GreenParts
+GreenPartsSID = Proj[supplier](GreenPartsCatalog)
+// Merge tuples from RedPartsSID and GreenPartsSID
+Res = RedPartsSID Intersection GreenPartsSID
+
+// alternatively
+RedAndGreenPartIDs = Proj[pid](Sel[colour='red' AND colour='green'](Parts))
+Res = Proj[sid](RedAndGreenPartIDs Join Catalog)
+
+
+e)
+AllPartIds = Proj[pid](Parts)
+AllSuppliers = Rename[supplier->sid, part->sid](Proj[supplier,part](Parts))
+Res = AllSuppliers / AllPartIds
+
+f)
+RedPartIds = Proj[pid](Sel[colour='red'](Parts))
+AllSuppliers = Rename[supplier->sid, part->sid](Proj[supplier,part](Parts))
+Res = AllSuppliers / RedPartIds
+
+
+g)
+RedOrGreenPartIds = Proj[pid](Sel[colour='red' OR colour='greeen'](Parts))
+AllSuppliers = Rename[supplier->sid, part->sid](Proj[supplier,part](Parts))
+Res = AllSuppliers / RedOrGreenPartIds
+
+h)
+RedPartIds = Proj[pid](Sel[colour='red'](Parts))
+GrenPartIds = Proj[pid](Sel[colour='green'](Parts))
+AllSuppliers = Rename[supplier->sid, part->sid](Proj[supplier,part](Parts))
+RedPartSuppliers = AllSuppliers / RedPartIds
+GreenPartSuppliers = AllSuppliers / RedPartIds
+RedOrGreenSuppliers = RedPartSuppliers Union GreenPartSuppliers
+
+i)
+C1 = Catalog
+C2 = Catalog
+SupplierPartPairs = Sel[C1.sid!=C2.sid](C1 Join[pid] C2)
+Res = Proj[C1.pid](SupplierPartPairs)
+
+j)
+C1 = Catalog
+C2 = Catalog
+SupplierPartPairs = Sel[C1.sid!=C2.sid AND C1.cost > C2.cost](C1 Join[pid] C2)
+Res = Proj[C1.sid, C2.sid](SupplierPartPairs)
+
+k.
+
+
+l.
+Parts = Sel[cost<200](Catalog)
+AllSupliers = Proj[sid](Suppliers)
+Res = Proj[part,supplier](Parts / AllSuppliers)
+
+
+8.
+
+9.
+
+

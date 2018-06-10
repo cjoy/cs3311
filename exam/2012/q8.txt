@@ -1,0 +1,57 @@
+# COMP3311 12s1 Exam Q8
+
+(a) ER-style mapping
+
+CREATE TABLE Employee (
+	id integer,
+	name text,
+	position text,
+	primary key (id)
+);
+
+CREATE TABLE PartTime (
+	id integer references Employee(id),
+	fraction float check (0.0 < fraction and fraction < 1.0),
+	primary key (id)
+);
+
+CREATE TABLE Casual (
+	id integer references Employee(id),
+	primary key (id)
+);
+
+CREATE TABLE HoursWorked (
+	id integer references Casual(id),
+	starting time,
+	ending time,
+	date date,
+	primary key (id,date),
+	constraint timing check (starting < ending)
+);
+
+Remarks:
+* we can't enforce total participation, as employee may have no associated subclass
+* we can't enforce disjoint subclass constraction
+
+(b) single-table mapping
+
+CREATE TABLE Employee (
+	id integer,
+	name text,
+	position text,
+	type text not null check (etype in ('part-time', 'casual')),
+	fraction float check (0.0 < fraction and fraction < 1.0),
+	primary key (id)
+);
+
+CREATE TABLE HoursWorked (
+	id integer references Employee(id),
+	starting time,
+	ending time,
+	date date,
+	primary key (id,date),
+	constraint timing check (starting < ending)
+);
+
+Remarks:
+- 

@@ -1,0 +1,38 @@
+<?php
+// is_member - determine whether an object is a member of a group
+
+require("lib/defs.php");
+$usage = "Usage: $argv[0] Prog|Strm|SubjCode AcadObjGroupID";
+$db = dbConnect(DB_CONNECTION);
+
+// Check arguments
+
+if (count($argv) < 3) exit("$usage\n");
+
+// Get/check code
+$code = trim($argv[1]);
+if (preg_match('/^[0-9]{4}$/',$code))
+	$table = "Programs";
+elseif (preg_match('/^[A-Z]{5}[A-Z0-9]$/',$code))
+	$table = "Streams";
+elseif (preg_match('/^[A-Z]{4}[0-9]{4}$/',$code))
+	$table = "Subjects";
+else
+	exit("Invalid code ($code)\n");
+$check = "select id from %L where code = %s";
+$id = dbOneValue($db, mkSQL($check, $table,$code));
+if (empty($id))
+	exit("Invalid code ($code)\n");
+
+// Get/check group ID
+$gid = $argv[2];
+$q = "select name from Acad_object_groups where id = %d";
+$t = dbOneTuple($db, mkSQL($q, $gid));
+if (empty($t)) exit("Invalid AcObjGroupID ($gid)\n");
+
+// Collect and display virtual transcript
+
+$result = inGroup($db, $code, $gid);
+echo ($result ? "yes" : "no"),"\n";
+
+?>

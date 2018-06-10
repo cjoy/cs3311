@@ -1,0 +1,359 @@
+<?php
+// COMP3311 18s1 Assignment 2
+// Functions for assignment Tasks A-E
+// Written by Christopher Joy (z5113243), May 2018
+
+// assumes that defs.php has already been included
+
+
+// Task A: get members of an academic object group
+
+// E.g. list($type,$codes) = membersOf($db, 111899)
+// Inputs:
+//  $db = open database handle
+//  $groupID = acad_object_group.id value
+// Outputs:
+//  array(GroupType,array(Codes...))
+//  GroupType = "subject"|"stream"|"program"
+//  Codes = acad object codes in alphabetical order
+//  e.g. array("subject",array("COMP2041","COMP2911"))
+
+function getEntityAttribute($db, $entity, $id, $attr)
+{
+	$q = "select ".$attr." from ".$entity." where id=".$id;
+	$tup = dbOneTuple($db,$q);
+	return $tup[$attr];
+}
+
+function getAcadObjGrp($db, $id)
+{
+	$q = "select * from acad_object_groups where id = %d";
+	$grp = dbOneTuple($db, mkSQL($q, $id));
+	return $grp;
+}
+
+function getAcadObjParents($db, $id)
+{
+	$parents = array($id);
+        $q = "select id from acad_object_groups where parent=".$id;
+        $res = dbQuery($db, $q);
+	while ($tup = dbNext($res)) {
+		array_push($parents, $tup["id"]);
+	}
+        return $parents;
+}
+
+function getEnumeratedAOM($db, $gid, $type)
+{
+	$items = array();
+	$q = "select ".$type." from ".$type."_group_members where ao_group=".$gid;
+	$res = dbQuery($db, $q);
+	while ($tup = dbNext($res)) {
+		$name = getEntityAttribute($db, $type."s", $tup[$type], "code");
+		array_push($items, $name);
+	}
+	return $items;
+}
+
+function getPatternAOM($db, $gid, $type, $def)
+{
+	$codes = array();
+//    $def = preg_replace("/#{1,}/", "%", $def);
+//    $def = preg_replace("/,|;/", "|", $def);
+//    $def = preg_replace("/{/", "(", $def);
+//    $def = preg_replace("/}/", ")", $def);
+//	$q = "select o.code from acad_object_groups a, ".$type."s o where o.code similar to '".$def."' and a.id=".$gid;
+//	$res = dbQuery($db, $q);
+//	while ($tup = dbNext($res)) {
+//        	array_push($codes, $tup[code]);
+    //	}
+
+//    echo $def."\n\n";
+
+    $def = preg_replace("/#{1,}/", ".", $def);
+    $def = preg_replace("/,|;/", "|", $def);
+    $def = preg_replace("/{/", "(", $def);
+    $def = preg_replace("/}/", ")", $def);
+    $q = "select code from ".$type."s";
+    $res = dbQuery($db, $q);
+    while ($tup = dbNext($res)) {
+        if (preg_match("/".$def."/", $tup[code])) array_push($codes, $tup[code]);
+    }
+	return $codes;
+}
+
+// TODO: case: /F= and !
+function membersOf($db,$groupID)
+{
+	$codes = array();
+	foreach (getAcadObjParents($db, $groupID) as $gID) {
+		$grp = getAcadObjGrp($db, $gID);
+		switch ($grp["gdefby"]) {
+		case 'enumerated':
+			$codes = array_merge($codes, getEnumeratedAOM($db, $grp["id"], $grp["gtype"]));
+			break;
+		case 'pattern':
+			if (preg_match("/^(GENG|GEN#|FREE|####|all|ALL)/", $grp["definition"])) {
+				array_push($codes, $grp["definition"]);
+			} else {
+				$codes = array_merge($codes, getPatternAOM($db, $grp["id"], $grp["gtype"], $grp["definition"]));
+			}
+			break;
+		}
+	}
+	sort($codes);
+	return array($type, $codes);
+}
+
+// Task B: check if given object is in a group
+
+// E.g. if (inGroup($db, "COMP3311", 111938)) ...
+// Inputs:
+//  $db = open database handle
+//  $code = code for acad object (program,stream,subject)
+//  $groupID = acad_object_group.id value
+// Outputs:
+//  true/false
+
+// TODO: case: /F= and !
+function inGroup($db, $code, $groupID)
+{
+    $codes = array();
+
+	foreach (getAcadObjParents($db, $groupID) as $gID) {
+		$grp = getAcadObjGrp($db, $gID);
+       	switch ($grp["gdefby"]) {
+        case 'enumerated':
+            $codes = array_merge($codes, getEnumeratedAOM($db, $grp["id"], $grp["gtype"]));
+	        break;
+	   	case 'pattern':
+            $matched =  getPatternAOM($db, $grp["id"], $grp["gtype"], ".");
+            $def = $grp["definition"];
+            $def = str_replace("#", ".", $def);
+            # custom checks
+            # TODO: This needs to be redone according to specs.
+            if (preg_match("/^(FREE|####|all|ALL)/", $grp["definition"])) { 
+                $matched = preg_grep("/^((?!GEN).)*$/", $matched);
+                $matched = preg_grep("/".$def."/", $matched);
+			}
+			elseif (preg_match("/^GEN/", $grp["definition"])) {
+                $matched = preg_grep("/^GEN/", $matched);
+            }
+    		else {
+				$matched = preg_grep("/".$def."/", $matched);
+			}
+//			echo $def."\n";
+//			foreach ($matched as $m) {
+//				echo "$m\n";
+//			}
+			$codes = array_merge($codes, $matched);
+			break;
+		}
+    }
+
+
+	return in_array($code, $codes);
+}
+
+
+// Task C: can a subject be used to satisfy a rule
+
+// E.g. if (canSatisfy($db, "COMP3311", 2449, $enr)) ...
+// Inputs:
+//  $db = open database handle
+//  $code = code for acad object (program,stream,subject)
+//  $ruleID = rules.id value
+//  $enr = array(ProgramID,array(StreamIDs...))
+// Outputs:
+
+// TODO: check if stream starting with GEN is allowed
+function canSatisfy($db, $code, $ruleID, $enrolment)
+{
+    $status = false;
+
+    // get aog for given rule
+    $rule = dbOneTuple($db, "select * from rules where id=".$ruleID);
+    // return false if no aog
+    if (!$rule[ao_group]) return false;
+
+    // check if it's in ao_group
+    $status = inGroup($db, $code, $rule[ao_group]);
+
+    // GenEd subjects need an extra check - check prog/stream faculty
+    if (preg_match("/^GEN/", $code) and $status) {
+        // generate faculities array from stream(s) / program
+        $faculties = array();
+        foreach ($enrolment[1] as $streamId) {
+            $q = "select facultyof(offeredBy) as id from streams where id =".$streamId;
+            $faculty = dbOneTuple($db,$q);
+            array_push($faculties, $faculty[id]);
+        }
+        $q = "select facultyof(offeredBy) as id from programs where id =".$enrolment[0];
+        $faculty = dbOneTuple($db,$q);
+        array_push($faculties, $faculty[id]);
+
+        // check if faculty allows for gened
+        // ie. stream/subject_fac as facultyId != program/stream_fac
+        $qSubject = "select facultyof(offeredBy) as id from subjects where code = '".$code."'";
+        $subject = dbOneTuple($db, $qSubject);
+        $qStream = "select facultyof(offeredBy) as id from streams where code = '".$code."'";
+        $stream = dbOneTuple($db, $qStream);
+        foreach ($faculties as $facultyId) {
+            if ($subject[id] == $facultyId or $stream[id] == $facultyId) {
+                $status = false;
+            }
+        }
+
+    }
+	return $status;
+}
+
+
+// Task D: determine student progress through a degree
+
+// E.g. $vtrans = progress($db, 3012345, "05s1");
+// Inputs:
+//  $db = open database handle
+//  $stuID = People.unswid value (i.e. unsw student id)
+//  $semester = code for semester (e.g. "09s2")
+// Outputs:
+//  Virtual transcript array (see spec for details)
+
+function getAttr($db, $table, $o_attr_key, $i_attr_key, $i_attr_val, $mask) {
+    $q = "select ".$o_attr_key." from ".$table." where ".$i_attr_key."=".$mask.$i_attr_val.$mask;
+    $res = dbOneTuple($db, $q);
+    return $res[$o_attr_key];
+}
+
+function getRules($db, $entity, $id) {
+    $results = array();
+    $res = dbQuery($db, "select * from ".$entity."_rules sr join rules r on r.id=sr.rule where sr.".$entity."=".$id);
+    while ($tup = dbNext($res)) {
+        array_push($results, $tup);
+    }
+    return $results;
+}
+
+// 1. get complete student record using transcript
+// 2. get a list of requirements from program/stream
+// 3. tick off completed requirements from list (in 2)
+function progress($db, $stuID, $term)
+{
+    $completed = array();
+    $todo = array();
+    
+    // 1. collect student transcript until perticular semester
+    $ts = collectCourseEnrolments($db, $stuID, $term);
+    array_pop($ts);
+    foreach ($ts as $t) {
+        echo $t[0]." - ".$t[1]." - ".$t[2]." - ".$t[3]." - ".$t[4]." - ".$t[5]."\n";
+    }
+    $ps = collectProgStrmEnrolments($db, $stuID, $term);
+    $last_ps = array_pop($ps);
+    $last_program = getAttr($db, "programs", "id", "code", $last_ps[1], "'");
+    $last_stream = $last_ps[2] == "Unknown" ? null : getAttr($db, "streams", "id", "code", $last_ps[2], "'");
+    echo "last program - $last_program    last stream - $last_stream \n";
+
+    // 2. get a list of rules for program / stream
+    $requirements = array("CC", "PE", "FE", "GE", "LR");
+    $sr = array(); $pr = array();
+    if ($last_stream) $sr = getRules($db, "stream", $last_stream);
+    if ($last_program) $pr = getRules($db, "program", $last_program);
+    $rules = array();
+    foreach (array_merge($pr, $sr) as $rule) {
+        if (in_array($rule[type], $requirements)) array_push($rules, $rule);       
+    }
+    foreach ($rules as $rule) {
+        echo $rule[id]." ".$rule[name]." ".$rule[type]." ".$rule[min]." ".$rule[max]." ".$rule[ao_group]."\n";
+    }
+
+
+    // 3. check if can satisfy
+    foreach ($ts as $t) {
+        foreach ($rules as $rule) {
+            if (
+                canSatisfy($db, $t[0], $rule[id], array($last_program, array($last_stream)))
+                and $t[4]
+            ) {
+                echo "->".$t[0]." satifies ".$rule[name]." ".$rule[id]."\n";
+            }
+        }
+    }
+    
+
+
+    echo "\n\n";
+    return array($completed, $todo); // stub
+}
+
+
+// Task E:
+
+// E.g. $advice = advice($db, 3012345, 162, 164)
+// Inputs:
+//  $db = open database handle
+//  $studentID = People.unswid value (i.e. unsw student id)
+//  $currTermID = code for current semester (e.g. "09s2")
+//  $nextTermID = code for next semester (e.g. "10s1")
+// Outputs:
+//  Advice array (see spec for details)
+
+function advice($db, $studentID, $currTermID, $nextTermID)
+{
+	return array(); // stub
+}
+
+
+
+
+
+/* HELPER FUNCTIONS */
+
+// Credits: these helper functions were written by John Sheperd,
+// and was taken from the ts php script.
+function getProgStrmEnrolments()
+{
+return <<<_SQL_
+select termName(pe.semester), p.code as program,
+         coalesce(s.code,'Unknown') as stream
+from   Program_enrolments pe
+         join Semesters t on (pe.semester = t.id)
+         join Programs p on (pe.program = p.id)
+         left outer join Stream_enrolments se on (se.partof = pe.id)
+         left outer join Streams s on (se.stream = s.id)
+where  pe.student = %d and pe.semester <= %d
+order  by t.starting
+_SQL_;
+}
+function collectProgStrmEnrolments($db, $sid, $tid)
+{
+        $r = dbQuery($db, mkSQL(getProgStrmEnrolments(), $sid, $tid));
+        $results = array();
+        while ($t = dbNext($r)) {
+                list($term, $prog, $strm) = $t;
+                $results[] = array($term,$prog,$strm);
+        }
+        return $results;
+}
+function collectCourseEnrolments($db, $sid, $tid)
+{
+        // luckily we already have a suitable transcript() function
+        $q = "select * from transcript(%d,%d)";
+        $r = dbQuery($db, mkSQL($q, $sid, $tid));
+        $results = array();
+        while ($t = dbNext($r)) {
+                list($code,$term,$title,$mark,$grade,$uoc) = $t;
+                $mark = is_null($mark) ? "" : sprintf("%d",$mark);
+                if (!empty($grade) && !isPass($grade)) $uoc = "";
+                $uoc = is_null($uoc) ? "" : sprintf("%d",$uoc);
+                $results[] = array($code,$term,$title,$mark,$grade,$uoc);
+        }
+    return $results;
+}
+function isPass($grade)
+{
+        $passGrades = array("PC"=>1,"PS"=>1,"CR"=>1,"DN"=>1,"HD"=>1,"SY"=>1);
+        return(isset($passGrades[$grade]));
+}
+
+?>

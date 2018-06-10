@@ -1,0 +1,50 @@
+<?php
+// advisor - show possible courses for a student for term after given term
+// Courses are ranked: Core > Program Electives > Free Electives > Gen Ed
+
+require("lib/defs.php");
+$usage = "Usage: $argv[0] StudentID Term";
+$db = dbConnect(DB_CONNECTION);
+
+// Check arguments
+
+if (count($argv) < 3) exit("$usage\n");
+list($x,$stuid,$term) = $argv;
+
+// Get/check student
+$q = "select id,name from People where unswid = %d";
+$t = dbOneTuple($db, mkSQL($q, $stuid));
+if (empty($t)) exit("Invalid student ($stuid)\n");
+list($sid,$name) = $t;
+
+// Get/check term
+$q = "select id from Semesters where termName(id) = %s";
+$currTID = dbOneValue($db, mkSQL($q, $term));
+if (empty($currTID)) exit("Invalid term ($term)\n");
+$q = "select id,termName(id) from Semesters where id = nextSemester(%s)";
+$next = dbOneTuple($db, mkSQL($q, $term));
+if (empty($next)) exit("Invalid next semester (after $term)\n");
+list($nextTID,$nextTerm) = $next;
+
+// Collect and display virtual transcript
+
+echo "$name ($stuid)\n";
+echo "Suggestions for study in $nextTerm\n\n";
+$advice = advice($db, $sid, $currTID, $nextTID);
+showProgramAdvice($advice);
+
+exit(0);
+
+// Helpers
+
+function showProgramAdvice($advice)
+{
+	$fmt = "%-8s %-20.20s %4s %s\n";
+	printf($fmt, "Course","Title","UOC","Requirement");
+	printf($fmt, "--------","-----","----","-----------");
+	foreach ($advice as $item) {
+		list($code,$title,$uoc,$req) = $item;
+		printf($fmt, $code,$title,$uoc,$req);
+	}
+}
+?>

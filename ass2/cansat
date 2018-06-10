@@ -1,0 +1,59 @@
+<?php
+// cansat - determine whether an subject can satisfy a rule
+
+require("lib/defs.php");
+$usage = "Usage: $argv[0] Prog|Strm|SubjCode RuleID Student Semester";
+$db = dbConnect(DB_CONNECTION);
+
+// Check arguments
+
+if (count($argv) < 5) exit("$usage\n");
+
+// Get/check code
+$code = trim($argv[1]);
+if (preg_match('/^[0-9]{4}$/',$code))
+	$table = "Programs";
+elseif (preg_match('/^[A-Z]{5}[A-Z0-9]$/',$code))
+	$table = "Streams";
+elseif (preg_match('/^[A-Z]{4}[0-9]{4}$/',$code))
+	$table = "Subjects";
+else
+	exit("Invalid code ($code)\n");
+$check = "select id from %L where code = %s";
+$id = dbOneValue($db, mkSQL($check, $table,$code));
+if (empty($id))
+	exit("Invalid code ($code)\n");
+
+// Get/check rule ID
+$q = "select id from Rules where id = %d";
+$ruleID = dbOneValue($db, mkSQL($q, $argv[2]));
+if (empty($ruleID)) exit("Invalid RuleID ($argv[2])\n");
+
+// Get/check student
+$q = "select id from People where unswid = %d";
+$stuID = dbOneValue($db, mkSQL($q, $argv[3]));
+if (empty($stuID)) exit("Invalid student ($argv[3])\n");
+
+// Get/check semester
+$sem = $argv[4];
+$q = "select id from Semesters where termName(id) = %s and longname not like '%%Asia%%'";
+$semID = dbOneValue($db, mkSQL($q, $sem));
+if (empty($semID)) exit("Invalid term ($sem)\n");
+
+// Check whether student enrolled in specified semester
+$q = "select id,program from Program_enrolments where student=%d and semester=%d";
+$pe = dbOneTuple($db, mkSQL($q,$stuID,$semID));
+if (empty($pe)) exit("Student ($stuID) not enrolled in $sem\n");
+$q = "select stream from Stream_enrolments where partof=%d";
+$r = dbQuery($db, mkSQL($q, $pe[0]));
+$streams = array();
+while ($t = dbNext($r)) { $streams[] = $t[0];}
+$enrolment = array($pe[1],$streams); // ProgID,StreamIDs
+#print_r($enrolment); // DBUG
+
+// Determine whether subject can satisfy rule
+
+$result = canSatisfy($db, $code, $ruleID, $enrolment);
+echo ($result ? "yes" : "no"),"\n";
+
+?>

@@ -1,0 +1,31 @@
+# COMP3311 12s1 Exam Q10
+
+(a)
+
+The program loops through all players in the players table.
+Whilst looping through all the players, it counts the current
+player's goals and prints the total number of goals the player has scored.
+
+(b)
+
+1 dbQuery called to select all the players.
+500 dbQueries for each player.
+
+Total dbQueries = 500 + 1 = 501
+
+(c)
+
+<?
+require(".../db.php");
+$db = dbConnect("dbname=exam");
+
+$q = "select p.name as name, count(p.name) as ng from players p join goals g on (p.id=g.scoredBy) group by p.name";
+$r = dbQuery($db, mkSQL($q));
+while ($t = dbNext($r)) {
+	list($name, $ng) = $t;
+	printf("%s %d\n", $name, $ng);
+}
+
+?>
+
+

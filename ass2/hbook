@@ -1,0 +1,196 @@
+<?
+// Display information about one academic object 
+
+require_once("lib/defs.php");
+$usage = "$argv[0] ProgCode|StrmCode|SubjCode\n";
+$db = dbConnect(DB_CONNECTION);
+
+if (count($argv) < 2) exit($usage);
+
+// Queries to get essential info from academic objects
+
+$getSubject = <<<_SQL_
+select s.id, s.code, s.longname as name,
+         coalesce(unitName(s.offeredby),'?') as offerer,
+         s.career, s.uoc, s.eftsload as load, s.contacthpw as hpw,
+         s.excluded, s.equivalent, substr(s.syllabus,1,50) as descr
+from   Subjects s
+where  s.code=%s
+_SQL_;
+
+$getStream = <<<_SQL_
+select s.id, s.code, s.name,
+         coalesce(unitName(s.offeredby),'?') as offerer,
+         t.career, t.description as stype,
+         substr(s.description,1,50) as descr
+from   Streams s join Stream_types t on (s.stype=t.id)
+where  s.code=%s
+_SQL_;
+
+$getProgram = <<<_SQL_
+select p.id, p.code, p.name,
+         coalesce(unitName(p.offeredby),'?') as offerer,
+         p.uoc, p.career, p.duration,
+         substr(p.description,1,50) as descr
+from   Programs p
+where  p.code=%s
+_SQL_;
+
+$code = trim($argv[1]);
+if (preg_match('/^[A-Z]{4}[0-9]{4}$/',$code)) {
+	$subj = dbOneTuple($db, mkSQL($getSubject,$code));
+	if (empty($subj))
+		exit("No such subject: $code\n");
+	else
+		showSubject($db,$subj);
+}
+elseif (preg_match('/^[A-Z]{5}[0-9A-Z]$/',$code)) {
+	$strm = dbOneTuple($db, mkSQL($getStream,$code));
+	if (empty($strm))
+		exit("No such stream: $code\n");
+	else
+		showStream($db,$strm);
+}
+elseif (preg_match('/^[0-9]{4}$/',$code)) {
+	$prog = dbOneTuple($db, mkSQL($getProgram,$code));
+	if (empty($prog))
+		exit("No such stream: $code\n");
+	else
+		showProgram($db,$prog);
+}
+else
+	exit($usage);
+
+// end of main
+
+
+// Helpers
+
+// display details of a program (including rules)
+function showProgram($db,$prog)
+{
+	// id,code,name,offerer,uoc,career,duration,descr
+	$fmt = "%-12s: %s\n";
+	$stats = show("%d",$prog["uoc"])." UOC, ".
+	         show("%d",$prog["duration"])." months full-time";
+	printf($fmt,"ProgID",$prog["id"]);
+	printf($fmt,"Program","$prog[code] $prog[name]");
+	printf($fmt,"Career",career($prog["career"]));
+	printf($fmt,"Offered By",$prog["offerer"]);
+	printf($fmt,"Stats",$stats);
+	printf($fmt,"Description",strip_tags($prog["descr"])."...");
+	printf($fmt,"Rules",showAllRules($db,"program",$prog["id"]));
+}
+
+// display details of a stream (including rules)
+function showStream($db,$strm)
+{
+	// id,code,name,offerer,career,stype,descr
+	$fmt = "%-12s: %s\n";
+	printf($fmt,"StrmID",$strm["id"]);
+	printf($fmt,"Stream","$strm[code] $strm[name]");
+	printf($fmt,"Career",career($strm["career"]));
+	printf($fmt,"Offered By",$strm["offerer"]);
+	printf($fmt,"Type",$strm["stype"]);
+	printf($fmt,"Description",strip_tags($strm["descr"])."...");
+	printf($fmt,"Rules",showAllRules($db,"stream",$strm["id"]));
+}
+
+// display rules for a program or stream
+//   in a (hopefully) human-readable format
+function showAllRules($db, $type, $id)
+{
+	$getRules = "select r.id, r.type ".
+	            "from %L_rules p join Rules r on (p.rule=r.id) ".
+	            "where  p.%L = %d";
+	$rulePriority = array("DS","CC","PE","FE","GE","LR","MR","RC","IR");
+
+	$r = dbQuery($db,mkSQL($getRules,$type,$type,$id));
+	$rs = array();
+	while ($t = dbNext($r)) { $rs[] = $t; }
+	$rules = "";
+	foreach ($rulePriority as $rtype) {
+		foreach ($rs as $r) {
+			list($rid,$type) = $r;
+			if ($type != $rtype) continue;
+			$rule = showRule($db,$rid);
+			if ($rules == "")
+				$rules = "$rule";
+			else
+				$rules .= sprintf("\n%12s: %s", " ", $rule);
+		}
+	}
+	return ($rules == "") ? "-" : "$rules";
+}
+
+// display details of a program (including pre-reqs)
+function showSubject($db,$subj)
+{
+	// id,code,name,offerer,career,uoc,load,hpw,excluded,equivalent,descr)
+	$fmt = "%-12s: %s\n";
+	$stats = show("%d",$subj["uoc"])." UOC, ".
+	         show("%0.3f",$subj["load"])." of full-load, ".
+	         show("%d",$subj["hpw"])." hours/week";
+	printf($fmt,"SubjID",$subj["id"]);
+	printf($fmt,"Subject","$subj[code] $subj[name]");
+	printf($fmt,"Career",career($subj["career"]));
+	printf($fmt,"Offered By",$subj["offerer"]);
+	printf($fmt,"Stats",$stats);
+	printf($fmt,"Description",strip_tags($subj["descr"])."...");
+	printf($fmt,"Pre-reqs",showPrereqs($db,$subj["id"])); 
+	printf($fmt,"Excluded",showAOgroup($db,$subj["excluded"]));
+	printf($fmt,"Equivalent",showAOgroup($db,$subj["equivalent"]));
+}
+
+function showPrereqs($db,$sid)
+{
+$getPreReqs = <<<_SQL_
+select r.id, r.type, r.min, r.max, r.ao_group, p.career
+from   Subject_prereqs p join Rules r on (p.rule=r.id)
+where  p.subject = %d
+order  by p.career
+_SQL_;
+
+	$prqs = "";
+	$r = dbQuery($db,mkSQL($getPreReqs,$sid));
+	while ($t = dbNext($r)) {
+		list($rid,$type,$min,$max,$aog) = $t;
+		$prq = showRule($db,$rid);
+		$prq = "$t[career]: $prq";
+		if ($prqs == "")
+			$prqs = "$prq";
+		else
+			$prqs .= sprintf("\n%12s: %s", " ", $prq);
+	}
+	return ($prqs == "") ? "-" : "$prqs";
+}
+
+
+// Utility functions
+
+function showAOgroup($db,$gid)
+{
+	$res = membersOf($db,$gid);
+	if (!is_array($res)) return "-";
+	list($type,$list) = $res;
+	if (count($list) == 0) return "-";
+	return join(",",$list);
+		
+}
+
+function career($c)
+{
+	$cs = array("UG"=>"Undergraduate", "PG"=>"Postgraduate",
+	            "HY"=>"Hybrid", "RS"=>"Research", "NA"=>"Non-award");
+	return isset($cs[$c]) ? $cs[$c] : "?";
+}
+
+// like printf, but makes null's visible (as "?")
+function show($fmt,$val)
+{
+	if (is_null($val))
+		return "?";
+	else
+		return sprintf($fmt,$val);
+}
+?>

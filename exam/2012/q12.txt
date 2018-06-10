@@ -1,0 +1,21 @@
+# COMP3311 12s1 Exam Q12
+
+(a)
+
+Tmp1 = Sel[payRate>20]Empl
+Res = Proj[eno, ename](Tmp1)
+
+(b)
+
+Tmp1 = Empl Join[eno=eno]Dept
+Res = Proj[name]Tmp1
+
+(c)
+
+Tmp1 = Sel[day='mon']Empl
+Tmp2 = Sel[day='tue']Empl
+Tmp3 = Sel[day='wed']Empl
+Tmp4 = Sel[day='thu']Empl
+Tmp5 = Sel[day='fri']Empl
+Tmp6 = Tmp1 Intersect Tmp2 Intersect Tmp3 Intersect Tmp 4 Intersect Tmp5
+Res = Proj[name]Tmp6

@@ -1,0 +1,17 @@
+<?
+// Give a list of codes for academic objects
+
+require_once("lib/defs.php");
+$db = dbConnect(DB_CONNECTION);
+$usage = "Usage: $argv[0] prog|strm|subj\n";
+
+$objects = array("prog"=>"Programs","strm"=>"Streams","subj"=>"Subjects");
+
+if (count($argv) < 2) exit($usage);
+$arg = substr($argv[1],0,4);
+if (!isset($objects[$arg])) exit($usage);
+
+$q = "select code from %L order by code";
+$r = dbQuery($db, mkSQL($q, $objects[$arg]));
+while ($t = dbNext($r)) echo "$t[0]\n";
+?>

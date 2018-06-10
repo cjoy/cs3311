@@ -1,0 +1,69 @@
+<?php
+// progress - print a virtual transcript for a student up to a given term
+// The virtual trnscript shows how program/stream requirements have been
+//   met and which requirements are not yet met
+
+require("lib/defs.php");
+$usage = "Usage: $argv[0] StudentID Term";
+$db = dbConnect(DB_CONNECTION);
+
+// Check arguments
+
+if (count($argv) < 3) exit("$usage\n");
+list($x,$stuid,$term) = $argv;
+
+// Get/check student
+$q = "select id,name from People where unswid = %d";
+$t = dbOneTuple($db, mkSQL($q, $stuid));
+if (empty($t)) exit("Invalid student ($stuid)\n");
+list($sid,$name) = $t;
+
+// Get/check term
+$q = "select id from Semesters where termName(id) = %s";
+$tid = dbOneValue($db, mkSQL($q, $term));
+if (empty($tid)) exit ("Invalid term ($term)\n");
+
+// Collect and display virtual transcript
+
+echo "$name ($stuid)\n\n";
+$vtrans = progress($db, $sid, $tid);
+showVirtualTranscript($vtrans);
+
+exit(0);
+
+// Helpers
+
+function showVirtualTranscript($vtrans)
+{
+	$fmt1 = "%-8s %4s %-30.30s %5s %5s %5s\n";
+	$fmt2 = "%8s %s\n";
+	printf($fmt1, "Course","Term","Title","Mark","Grade","UOC");
+	printf($fmt1, "--------","----","-----","-----","-----","-----");
+	foreach ($vtrans as $item) {
+		switch (count($item)) {
+		case 7:
+			// regular transcript item
+			list($subj,$term,$title,$mark,$grade,$uoc,$req) = $item;
+			$mark = is_null($mark) ? "" : sprintf("%d",$mark);
+			$uoc = is_null($uoc) ? "" : sprintf("%d",$uoc);
+			printf($fmt1, $subj,$term,$title,$mark,$grade,$uoc);
+			if (!empty($req)) printf($fmt2, "...",$req);
+			break;
+		case 3:
+			// wam item
+			list($label,$wam,$uoc) = $item;
+			$wam = is_null($wam) ? "None" : sprintf("%d",$wam);
+			$uoc = is_null($uoc) ? "" : sprintf("%d",$uoc);
+			printf($fmt1, "","",$label,$wam,"",$uoc);
+			printf("TO DO\n-----\n");
+
+			break;
+		case 2:
+			// todo item
+			list($todo,$req) = $item;
+			printf("%s\n$fmt2", $todo,"...",$req);
+			break;
+		}
+	}
+}
+?>

@@ -1,0 +1,39 @@
+# COMP3311 12s1 Exam Q9
+
+(a)
+
+create function fixCoursesOnAddCourseEnrolment() returns trigger
+as $$
+declare
+	_nS integer;  _nE integer;  _sum integer;  _avg float;
+begin
+	
+end;
+$$
+language plpgsql;
+
+(b)
+
+create function fixCoursesOnDropCourseEnrolment() returns trigger
+as $$
+declare
+	_nS integer;  _nE integer;  _sum integer;  _avg float;
+begin
+	
+end;
+$$
+language plpgsql;
+
+
+(c)
+
+create function fixCoursesOnModCourseEnrolment() returns trigger
+as $$
+declare
+	_nS integer;  _nE integer;  _sum integer;  _avg float;
+begin
+	
+end;
+$$
+language plpgsql;
+

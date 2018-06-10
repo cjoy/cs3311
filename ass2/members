@@ -1,0 +1,21 @@
+<?php
+// members - print members of an academic object group
+
+require("lib/defs.php");
+$usage = "Usage: $argv[0] AcObjGroupID";
+$db = dbConnect(DB_CONNECTION);
+
+// Check arguments
+if (count($argv) < 2) exit("$usage\n");
+
+// Get/check group ID
+$gid = $argv[1];
+$q = "select name from Acad_object_groups where id = %d";
+$t = dbOneTuple($db, mkSQL($q, $gid));
+if (empty($t)) exit("Invalid AcObjGroupID ($gid)\n");
+
+// Collect and display members
+list($type,$members) = membersOf($db, $gid);
+foreach ($members as $code) echo "$code\n";
+
+?>
